@@ -1,6 +1,3 @@
-///<reference path="../../../headers/common.d.ts" />
-
-import angular from 'angular';
 import _ from 'lodash';
 
 import * as dateMath from 'app/core/utils/datemath';
@@ -120,7 +117,7 @@ export default class InfluxDatasource {
 
       return {data: seriesList};
     });
-  };
+  }
 
   annotationQuery(options) {
     if (!options.annotation.query) {
@@ -137,7 +134,7 @@ export default class InfluxDatasource {
       }
       return new InfluxSeries({series: data.results[0].series, annotation: options.annotation}).getAnnotations();
     });
-  };
+  }
 
   targetContainsTemplate(target) {
     for (let group of target.groupBy) {
@@ -155,7 +152,7 @@ export default class InfluxDatasource {
     }
 
     return false;
-  };
+  }
 
   metricFindQuery(query) {
     var interpolated = this.templateSrv.replace(query, null, 'regex');
@@ -193,8 +190,17 @@ export default class InfluxDatasource {
   }
 
   testDatasource() {
-    return this.metricFindQuery('SHOW MEASUREMENTS LIMIT 1').then(() => {
-      return { status: "success", message: "Data source is working", title: "Success" };
+    var queryBuilder = new InfluxQueryBuilder({measurement: '', tags: []}, this.database);
+    var query = queryBuilder.buildExploreQuery('RETENTION POLICIES');
+
+    return this._seriesQuery(query).then(res => {
+      let error = _.get(res, 'results[0].error');
+      if (error) {
+        return { status: "error", message: error };
+      }
+      return { status: "success", message: "Data source is working" };
+    }).catch(err => {
+      return { status: "error", message: err.message };
     });
   }
 
@@ -204,10 +210,12 @@ export default class InfluxDatasource {
     var currentUrl = self.urls.shift();
     self.urls.push(currentUrl);
 
-    var params: any = {
-      u: self.username,
-      p: self.password,
-    };
+    var params: any = {};
+
+    if (self.username) {
+      params.u =  self.username;
+      params.p =  self.password;
+    }
 
     if (self.database) {
       params.db = self.database;
@@ -241,13 +249,13 @@ export default class InfluxDatasource {
     }, function(err) {
       if (err.status !== 0 || err.status >= 300) {
         if (err.data && err.data.error) {
-          throw { message: 'InfluxDB Error Response: ' + err.data.error, data: err.data, config: err.config };
+          throw { message: 'InfluxDB Error: ' + err.data.error, data: err.data, config: err.config };
         } else {
-          throw { message: 'InfluxDB Error: ' + err.message, data: err.data, config: err.config };
+          throw { message: 'Network Error: ' + err.statusText + '(' + err.status + ')', data: err.data, config: err.config };
         }
       }
     });
-  };
+  }
 
   getTimeFilter(options) {
     var from = this.getInfluxTime(options.rangeRaw.from, false);
@@ -255,10 +263,10 @@ export default class InfluxDatasource {
     var fromIsAbsolute = from[from.length-1] === 'ms';
 
     if (until === 'now()' && !fromIsAbsolute) {
-      return 'time > ' + from;
+      return 'time >= ' + from;
     }
 
-    return 'time > ' + from + ' and time < ' + until;
+    return 'time >= ' + from + ' and time <= ' + until;
   }
 
   getInfluxTime(date, roundUp) {
@@ -279,4 +287,3 @@ export default class InfluxDatasource {
     return date.valueOf() + 'ms';
   }
 }
-

@@ -42,6 +42,7 @@ func GetUserByLoginOrEmail(c *middleware.Context) Response {
 	}
 	user := query.Result
 	result := m.UserProfileDTO{
+		Id:             user.Id,
 		Name:           user.Name,
 		Email:          user.Email,
 		Login:          user.Login,
@@ -239,7 +240,9 @@ func searchUser(c *middleware.Context) (*m.SearchUsersQuery, error) {
 		page = 1
 	}
 
-	query := &m.SearchUsersQuery{Query: "", Page: page, Limit: perPage}
+	searchQuery := c.Query("query")
+
+	query := &m.SearchUsersQuery{Query: searchQuery, Page: page, Limit: perPage}
 	if err := bus.Dispatch(query); err != nil {
 		return nil, err
 	}

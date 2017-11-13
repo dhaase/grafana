@@ -20,7 +20,7 @@ func GetDataSources(c *middleware.Context) Response {
 
 	result := make(dtos.DataSourceList, 0)
 	for _, ds := range query.Result {
-		dsItem := dtos.DataSource{
+		dsItem := dtos.DataSourceListItemDTO{
 			Id:        ds.Id,
 			OrgId:     ds.OrgId,
 			Name:      ds.Name,
@@ -119,7 +119,13 @@ func AddDataSource(c *middleware.Context, cmd m.AddDataSourceCommand) {
 		return
 	}
 
-	c.JSON(200, util.DynMap{"message": "Datasource added", "id": cmd.Result.Id, "name": cmd.Result.Name})
+	ds := convertModelToDtos(cmd.Result)
+	c.JSON(200, util.DynMap{
+		"message":    "Datasource added",
+		"id":         cmd.Result.Id,
+		"name":       cmd.Result.Name,
+		"datasource": ds,
+	})
 }
 
 func UpdateDataSource(c *middleware.Context, cmd m.UpdateDataSourceCommand) Response {
@@ -133,10 +139,19 @@ func UpdateDataSource(c *middleware.Context, cmd m.UpdateDataSourceCommand) Resp
 
 	err = bus.Dispatch(&cmd)
 	if err != nil {
-		return ApiError(500, "Failed to update datasource", err)
+		if err == m.ErrDataSourceUpdatingOldVersion {
+			return ApiError(500, "Failed to update datasource. Reload new version and try again", err)
+		} else {
+			return ApiError(500, "Failed to update datasource", err)
+		}
 	}
-
-	return Json(200, util.DynMap{"message": "Datasource updated", "id": cmd.Id, "name": cmd.Name})
+	ds := convertModelToDtos(cmd.Result)
+	return Json(200, util.DynMap{
+		"message":    "Datasource updated",
+		"id":         cmd.Id,
+		"name":       cmd.Name,
+		"datasource": ds,
+	})
 }
 
 func fillWithSecureJsonData(cmd *m.UpdateDataSourceCommand) error {
@@ -149,8 +164,8 @@ func fillWithSecureJsonData(cmd *m.UpdateDataSourceCommand) error {
 	if err != nil {
 		return err
 	}
-	secureJsonData := ds.SecureJsonData.Decrypt()
 
+	secureJsonData := ds.SecureJsonData.Decrypt()
 	for k, v := range secureJsonData {
 
 		if _, ok := cmd.SecureJsonData[k]; !ok {
@@ -226,6 +241,7 @@ func convertModelToDtos(ds *m.DataSource) dtos.DataSource {
 		IsDefault:         ds.IsDefault,
 		JsonData:          ds.JsonData,
 		SecureJsonFields:  map[string]bool{},
+		Version:           ds.Version,
 	}
 
 	for k, v := range ds.SecureJsonData {
